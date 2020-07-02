@@ -8,9 +8,9 @@ export const Error = styled.span`
 `;
 
 export const Label = styled(FormLabel)`
-  font-size: 18px;
+  font-size: 16px;
   display: block;
-  font-style: italic;
+  color: #333333AA;
 `;
 
 export const Container = styled.div`

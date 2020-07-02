@@ -1,28 +1,17 @@
-import api from "@services/api";
+import { push } from "connected-react-router";
 import { call, put } from "redux-saga/effects";
+
+import AuthService from "@services/AuthService";
+
+
 import { loginSuccess, loginFailure } from "./actions";
 
 export function* login(action: any) {
   try {
-    const response = yield call(api.post, "/auth/", action.payload);
-    const {
-      token,
-      user: {
-        id,
-        username,
-        is_superuser: superUser,
-        first_name: firstName,
-        last_name: lastName
-      }
-    } = response.data;
-    const profile = {
-      id,
-      username,
-      superUser,
-      firstName,
-      lastName
-    };
-    yield put(loginSuccess({ token, profile }));
+    const { token } = yield call([AuthService, AuthService.login], action.payload.email, action.payload.password);
+
+    yield put(loginSuccess(token));
+    yield put(push("/"));
   } catch (err) {
     yield put(loginFailure());
   }

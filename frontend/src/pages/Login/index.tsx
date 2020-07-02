@@ -1,193 +1,195 @@
-import React, { useState, useRef } from "react";
-import { FaArrowLeft } from "react-icons/fa";
-import { connect } from "react-redux";
-import { Redirect } from "react-router";
+import React, {
+  useState, useRef, useCallback, useEffect,
+} from "react";
 
-import Input from "@components/Form/Input";
 import * as SessionActions from "@ducks/session/actions";
-import { SessionState, ILogin } from "@ducks/session/types";
-import { ApplicationState } from "@store/index";
+import { ILogin } from "@ducks/session/types";
 import { FormHandles } from "@unform/core";
 import { Form } from "@unform/web";
-import { Dispatch, bindActionCreators } from "redux";
+import { useValidationState } from "~/hooks";
 import * as Yup from "yup";
+
+import AuthService from "@services/AuthService";
+
+import { useAction } from "@store/hooks";
+
+import Step from "@pages/Login/Step";
+
+import Input from "@components/Form/Input";
+
 
 import { Container, Box } from "./styles";
 
 enum STEPS {
   EMAIL = "email",
   CPF = "cpf",
+  NOME = "nome",
   PASSWORD = "password"
 }
 
-type StateProps = SessionState;
-
-interface DispatchProps {
-  loginRequest(data: ILogin): void;
-}
-
-type Props = StateProps & DispatchProps;
-
 const emailValidation = Yup.string()
-  .max(90)
-  .email("Email inválido")
-  .required("Informe o email");
+  .max(90).email("Email inválido").required("Informe o email");
 
 const cpfValidation = Yup.string()
-  .length(11)
-  .required("Informe o cpf");
+  .length(11, "O cpf deve ter 11 caracteres").required("Informe o cpf");
+
+const nomeValidation = Yup.string()
+  .min(3, "O nome deve ter no mínimo 3 caracteres").max(40, "O nome deve ter no máximo 40 caracteres")
+  .required("Informe o nome");
 
 const passwordValidation = Yup.string()
-  .max(20)
-  .min(8)
+  .max(20, "A senha deve conter no máximo 20 caracteres").min(8, "A senha deve conter no mínimo 8 caracteres")
   .required("Informe uma senha");
 
-const Login: React.FC<Props> = ({
-  loading,
-  error,
-  isAuthenticated,
-  loginRequest
-}) => {
-  const handleSubmit = ({ username, password }: any) => {
-    loginRequest({ username, password });
-  };
-
-  const [step, setStep] = useState(STEPS.EMAIL);
-  const [email, setEmail] = useState("");
-  const [cpf, setCpf] = useState("");
-  const [password, setPassword] = useState("");
-
+const Login: React.FC = () => {
+  const loginRequest = useAction(SessionActions.loginRequest);
   const formRef = useRef<FormHandles>(null);
 
-  const handleOnStep = async () => {
-    if (step === STEPS.EMAIL) {
-      const emailInput = formRef.current?.getFieldRef("email");
-      if (await emailValidation.isValid(emailInput.value)) setStep(STEPS.CPF);
+  const [step, setStep] = useState(STEPS.EMAIL);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [email, setEmail, validateEmail] = useValidationState("", STEPS.EMAIL, formRef, emailValidation);
+  const [cpf, setCpf, validateCpf] = useValidationState("", STEPS.CPF, formRef, cpfValidation);
+  const [nome, setNome, validateNome] = useValidationState("", STEPS.NOME, formRef, nomeValidation);
+  const [password, setPassword, validatePassword] = useValidationState("", STEPS.PASSWORD, formRef, passwordValidation);
+
+  useEffect(() => {
+    setEmailVerified(false);
+  }, [email]);
+
+  const handleSubmit = useCallback(({ email, password }: ILogin) => {
+    loginRequest({ email, password });
+  }, [loginRequest]);
+
+  const handleBackPressed = () => {
+    let previousStep:STEPS | undefined;
+
+    if (step === STEPS.PASSWORD) {
+      previousStep = emailVerified ? STEPS.EMAIL : STEPS.PASSWORD;
+    } else if (step === STEPS.NOME) {
+      previousStep = STEPS.CPF;
     } else if (step === STEPS.CPF) {
-      const cpfInput = formRef.current?.getFieldRef("cpf");
-      if (await cpfValidation.isValid(cpfInput.value)) setStep(STEPS.PASSWORD);
-    } else {
-      const passwordInput = formRef.current?.getFieldRef("password");
-      if (await passwordValidation.isValid(passwordInput.value)) {
-        setPassword(passwordInput.value);
-      }
+      previousStep = STEPS.EMAIL;
     }
+    if (previousStep) {
+      setStep(previousStep);
+    }
+  };
+
+  const handleNextPressed = useCallback(
+    () => {
+      async function handleOnStep() {
+        let nextStep;
+        if (step === STEPS.EMAIL) {
+          const validated = await validateEmail();
+          if (validated) {
+            const verifiedEmail = await AuthService.verifyEmail(email);
+            setEmailVerified(verifiedEmail);
+            if (verifiedEmail) {
+              nextStep = STEPS.PASSWORD;
+            } else {
+              nextStep = STEPS.CPF;
+            }
+          }
+        } else if (step === STEPS.CPF) {
+          const validated = await validateCpf();
+          if (validated) {
+            nextStep = STEPS.NOME;
+          }
+        } else if (step === STEPS.NOME) {
+          const validated = await validateNome();
+          if (validated) {
+            nextStep = STEPS.PASSWORD;
+          }
+        } else {
+          await validatePassword();
+        }
+
+        if (nextStep) {
+          setStep(nextStep);
+        } else {
+          handleSubmit({ email, password });
+        }
+      }
+
+      handleOnStep();
+    }, [email, handleSubmit, password, step, validateCpf, validateEmail, validateNome, validatePassword],
+  );
+
+  const steps = {
+    [STEPS.EMAIL]: {
+      title: "Faça Login",
+      description: "Encontre os serviços que procura",
+      renderInput: () => (
+        <Input
+          name="email"
+          placeholder="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+        />
+      ),
+    },
+    [STEPS.CPF]: {
+      title: "Faça Login",
+      description: "Diz ai! Qual o seu CPF?",
+      renderInput: () => (
+        <Input
+          mask="999.999.999-00"
+          name="cpf"
+          placeholder="000.000.000-00"
+          maxLength={11}
+          value={cpf}
+          onChange={e => setCpf(e.target.value)}
+        />
+      ),
+    },
+    [STEPS.NOME]: {
+      title: "Faça Login",
+      description: "Como podemos chama-lo?",
+      renderInput: () => (
+        <Input
+          name="nome"
+          placeholder="Digite seu nome"
+          maxLength={50}
+          value={nome}
+          onChange={e => setNome(e.target.value)}
+        />
+      ),
+    },
+    [STEPS.PASSWORD]: {
+      title: "Faça Login",
+      description: emailVerified ? "Digite sua Senha para efetuar o login" : "Escolha uma senha",
+      renderInput: () => (
+        <Input
+          name="password"
+          placeholder="Senha"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          type="password"
+        />
+      ),
+    },
   };
 
   return (
     <Container>
       <Box>
         <Form
-          onSubmit={() => handleSubmit({ username: email, password })}
+          onSubmit={() => handleSubmit({ email, password })}
           ref={formRef}
         >
-          {step === STEPS.EMAIL && (
-            <div>
-              <div className="title-container">
-                <h1>Faça Login</h1>
-
-                <h2>Encontre os serviços que procura</h2>
-              </div>
-              <div className="input-container">
-                <Input
-                  name="email"
-                  placeholder="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="btn-container">
-                <button type="button" onClick={() => handleOnStep()}>
-                  Continuar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === STEPS.CPF && (
-            <>
-              <div className="arrow-container">
-                <button
-                  onClick={() => setStep(STEPS.EMAIL)}
-                  className="arrow-left"
-                  type="button"
-                >
-                  <FaArrowLeft />
-                </button>
-              </div>
-              <div>
-                <div className="title-container">
-                  <h1>Faça Login</h1>
-
-                  <h2>Diz ai! Qual o seu CPF?</h2>
-                </div>
-                <div className="input-container">
-                  <Input
-                    name="cpf"
-                    placeholder="000.000.000-00"
-                    maxLength={11}
-                    value={cpf}
-                    onChange={e => setCpf(e.target.value)}
-                  />
-                </div>
-                <div className="btn-container">
-                  <button type="button" onClick={() => handleOnStep()}>
-                    Continuar
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {step === STEPS.PASSWORD && (
-            <>
-              <div className="arrow-container">
-                <button
-                  type="button"
-                  onClick={() => setStep(STEPS.CPF)}
-                  className="arrow-left"
-                >
-                  <FaArrowLeft />
-                </button>
-              </div>
-              <div>
-                <div className="title-container">
-                  <h1>Faça Login</h1>
-
-                  <h2>Escolha uma senha</h2>
-                </div>
-                <div className="input-container">
-                  <Input
-                    name="password"
-                    placeholder="Senha"
-                    type="password"
-                    onChange={e => setPassword(e.target.value)}
-                  />
-                </div>
-                <div className="btn-container">
-                  <button type="submit" onClick={() => handleOnStep()}>
-                    Continuar
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
+          <Step
+            backActive={step !== STEPS.EMAIL}
+            title={steps[step].title}
+            description={steps[step].description}
+            onNextPressed={() => handleNextPressed()}
+            onBackPressed={() => handleBackPressed()}
+          >
+            {steps[step].renderInput()}
+          </Step>
         </Form>
       </Box>
-      {isAuthenticated && <Redirect to="/dashboard" />}
     </Container>
   );
 };
 
-const mapStateToProps = ({
-  session: { loading, error, isAuthenticated }
-}: ApplicationState) => ({
-  loading,
-  error,
-  isAuthenticated
-});
-
-const mapDispatchToProps = (dispatch: Dispatch) =>
-  bindActionCreators(SessionActions, dispatch);
-
-export default connect(mapStateToProps, mapDispatchToProps)(Login);
+export default Login;

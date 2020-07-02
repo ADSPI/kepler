@@ -1,16 +1,31 @@
 import React from "react";
-import { BrowserRouter, Switch, Route } from "react-router-dom";
+import { Switch, Route } from "react-router-dom";
+
+import { ConnectedRouter } from "connected-react-router";
+
+import { history } from "@store/index";
+
+import Login from "@pages/Login";
+import MyServices from "@pages/MyServices";
+import Services from "@pages/Services";
+import ServicesDetail from "@pages/ServicesDetail";
+import UserInfo from "@pages/UserInfo";
 
 import Template from "@components/Template";
-import Components from "@pages/Components";
-import Login from "@pages/Login";
-import Services from "@pages/Services";
-import Env from "~/utils/env";
+
+import HiredServices from "./pages/HiredServices";
+import RegisterService from "./pages/RegisterService";
 
 const Routes: React.FC = () => (
-  <BrowserRouter>
+  <ConnectedRouter history={history}>
     <Switch>
       <Route exact path="/login" component={Login} />
+
+      <Route exact path="/user-info">
+        <Template>
+          <UserInfo />
+        </Template>
+      </Route>
 
       <Route exact path="/">
         <Template>
@@ -18,11 +33,34 @@ const Routes: React.FC = () => (
         </Template>
       </Route>
 
-      {Env("ENV") === "DEV" && (
-        <Route exact path="/components" component={Components} />
-      )}
+      <Route exact path="/services/:id">
+        <Template>
+          <ServicesDetail />
+        </Template>
+      </Route>
+      <Route exact path="/hired-services">
+        <Template>
+          <HiredServices />
+        </Template>
+      </Route>
+      <Route exact path="/my-services">
+        <Template>
+          <MyServices />
+        </Template>
+      </Route>
+      <Route exact path="/my-services/:id">
+        <Template>
+          <RegisterService />
+        </Template>
+      </Route>
+      <Route exact path="/register-service">
+        <Template>
+          <RegisterService />
+        </Template>
+      </Route>
     </Switch>
-  </BrowserRouter>
+  </ConnectedRouter>
 );
+
 
 export default Routes;

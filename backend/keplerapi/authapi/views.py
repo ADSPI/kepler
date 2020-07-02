@@ -4,6 +4,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import permissions,status
 from .models import User
+from api.email import EmailSender
+
+import os
 
 @api_view(['GET'])
 @permission_classes((permissions.IsAuthenticated,))
@@ -44,6 +47,17 @@ def forgot_password(request):
 
     user.save()
 
+    data_email = {
+        "name": user.first_name,
+        "forgotPasswordUrl": "%s/forgot?token=%s" %(os.getenv("FRONTEND_URL"),user.forgot_password_token)
+    }
+
+    EmailSender.send(
+        tos=[user.email],
+        template_path="email/forgot-password.html",
+        data=data_email,
+        subject="Esqueci Minha Senha")
+
     return Response("Verifique seu email para resetar a senha")
 
 @api_view(['POST'])
@@ -70,3 +84,20 @@ def reset_password(request):
     user.save()
 
     return Response("Password was reset successfully")  
+
+@api_view(['GET'])
+def verify_email_alredy_exists(request):
+    query_params = request.query_params
+
+    if 'email' not in query_params.keys():
+        return Response(data={"type": "error", "content": "Email é obrigatório"},status=status.HTTP_400_BAD_REQUEST)
+
+    email = query_params['email']
+
+    try:
+        User.objects.get(email = email)
+    except:
+        return Response(status=status.HTTP_417_EXPECTATION_FAILED)
+
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
